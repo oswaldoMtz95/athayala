@@ -5,6 +5,7 @@ const { MongoClient } = require('mongodb');
 const app    = express();
 const port   = process.env.PORT || 3000;
 const uri    = process.env.MONGODB_URI;
+
 const client = new MongoClient(uri);
 
 app.use(express.json());
@@ -15,7 +16,7 @@ app.post('/api', async (req, res) => {
     await client.connect();
     const collection = client.db('Atjayaala').collection('rutas');
     const { id, lat, lon, vel, alt, sat, hdop, gps_ok, red } = req.body;
-    if (!lat || !lon) return res.status(400).json({ error: 'Faltan lat o lon' });
+   if (lat === undefined || lon === undefined) return res.status(400).json({ error: 'Faltan lat o lon' });
     await collection.insertOne({ id, lat, lon, vel, alt, sat, hdop, gps_ok, red, timestamp: new Date() });
     return res.status(200).json({ status: 'Guardado en DB' });
   } catch (err) {
