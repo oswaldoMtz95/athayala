@@ -1,5 +1,5 @@
-// server.js
-const express    = require('express');
+const express = require('express');
+const path    = require('path');
 const { MongoClient } = require('mongodb');
 
 const app    = express();
@@ -8,27 +8,21 @@ const uri    = process.env.MONGODB_URI;
 const client = new MongoClient(uri);
 
 app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));  // ← esta línea
 
-// POST - recibe ubicación del ESP32
 app.post('/api', async (req, res) => {
   try {
     await client.connect();
     const collection = client.db('Atjayaala').collection('rutas');
-    const { id, lat, lon } = req.body;
-
-    if (!lat || !lon) {
-      return res.status(400).json({ error: 'Faltan lat o lon' });
-    }
-
-    await collection.insertOne({ id, lat, lon, timestamp: new Date() });
+    const { id, lat, lon, vel, alt, sat, hdop, gps_ok, red } = req.body;
+    if (!lat || !lon) return res.status(400).json({ error: 'Faltan lat o lon' });
+    await collection.insertOne({ id, lat, lon, vel, alt, sat, hdop, gps_ok, red, timestamp: new Date() });
     return res.status(200).json({ status: 'Guardado en DB' });
-
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
 });
 
-// GET - última ubicación
 app.get('/api', async (req, res) => {
   try {
     await client.connect();
