@@ -1,29 +1,102 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-    <title>Rastreador Atja̱ꞌyaa̱ꞌla</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Atja̱ꞌyaa̱ꞌla - Mission Control</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-    <style> #map { height: 100vh; width: 100%; } </style>
+    <style>
+        body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        #map { height: 100vh; width: 100%; }
+        
+        /* Barra de estado inferior */
+        #status-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.85);
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 1000;
+            font-size: 14px;
+            border-top: 2px solid #00ff88;
+        }
+
+        .status-dot {
+            height: 10px;
+            width: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+
+        .online { background-color: #00ff88; box-shadow: 0 0 10px #00ff88; }
+        .offline { background-color: #ff3e3e; box-shadow: 0 0 10px #ff3e3e; }
+        
+        .info-group { display: flex; flex-direction: column; }
+        .label { color: #aaa; font-size: 10px; text-transform: uppercase; }
+        .value { font-weight: bold; }
+    </style>
 </head>
 <body>
+
     <div id="map"></div>
+
+    <div id="status-bar">
+        <div class="info-group">
+            <span class="label">Dispositivo</span>
+            <span class="value" id="dev-id">Buscando...</span>
+        </div>
+        <div class="info-group">
+            <span class="label">Coordenadas</span>
+            <span class="value" id="coords">-- , --</span>
+        </div>
+        <div class="info-group">
+            <span class="label">Estado del Servidor</span>
+            <span id="conn-status"><span class="status-dot"></span> Intentando conectar...</span>
+        </div>
+    </div>
+
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script>
-        const map = L.map('map').setView([20.67, -103.34], 13); // Guadalajara inicial
+        const map = L.map('map').setView([20.6767, -103.3467], 15);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
         const marker = L.marker([0, 0]).addTo(map);
 
-        async function actualizarMapa() {
-            const res = await fetch('/api');
-            const data = await res.json();
-            if (data.lat) {
-                const pos = [data.lat, data.lon];
-                marker.setLatLng(pos);
-                map.panTo(pos);
-                marker.bindPopup("Atja̱ꞌyaa̱ꞌla está aquí<br>Hora: " + data.timestamp).openPopup();
+        async function actualizarUbicacion() {
+            const statusEl = document.getElementById('conn-status');
+            try {
+                const response = await fetch('/api');
+                if (!response.ok) throw new Error("Fallo en servidor");
+                
+                const data = await response.json();
+                
+                if (data.lat && data.lon) {
+                    const pos = [data.lat, data.lon];
+                    marker.setLatLng(pos);
+                    map.setView(pos);
+                    
+                    // Actualizar textos del Dashboard
+                    document.getElementById('dev-id').innerText = data.dispositivo || "Atja̱ꞌyaa̱ꞌla_Collar";
+                    document.getElementById('coords').innerText = `${data.lat.toFixed(4)}, ${data.lon.toFixed(4)}`;
+                    
+                    // Estado Éxito
+                    statusEl.innerHTML = '<span class="status-dot online"></span> Conexión con éxito';
+                    marker.bindPopup("<b>Atja̱ꞌyaa̱ꞌla</b><br>Visto: " + new Date(data.fecha).toLocaleString()).openPopup();
+                }
+            } catch (err) {
+                // Estado Fallo
+                statusEl.innerHTML = '<span class="status-dot offline"></span> Error de conexión';
+                console.error(err);
             }
         }
-        setInterval(actualizarMapa, 10000); // Se actualiza cada 10 segundos
+
+        setInterval(actualizarUbicacion, 10000);
+        actualizarUbicacion();
     </script>
 </body>
 </html>
