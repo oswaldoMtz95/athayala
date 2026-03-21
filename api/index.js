@@ -1,28 +1,47 @@
-// api/index.js (Para subir a Vercel)
+// api/index.js
 const { MongoClient } = require('mongodb');
 
-// Reemplaza con tu conexión de MongoDB Atlas
-
-const uri = "mongodb+srv://endii:magama@cluster0.1ybyykn.mongodb.net/?appName=Cluster0";
-// O mejor aún:
-// const uri = process.env.MONGODB_URI;
+// ✅ URI desde variable de entorno (nunca en el código)
+const uri = process.env.MONGODB_URI;
 const client = new MongoClient(uri);
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
+  // Cabeceras CORS por si acaso
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  try {
     await client.connect();
-    const db = client.db('Atjayaala');
+    const db         = client.db('Atjayaala');
     const collection = db.collection('rutas');
 
     if (req.method === 'POST') {
-        // La placa manda: { "lat": 20.6, "lon": -103.3, "bat": 85 }
-        const data = { ...req.body, timestamp: new Date() };
-        await collection.insertOne(data);
-        return res.status(200).json({ status: 'Guardado en DB' });
+      const { id, lat, lon } = req.body;
+
+      // Validar que lleguen los datos
+      if (!lat || !lon) {
+        return res.status(400).json({ error: 'Faltan lat o lon' });
+      }
+
+      const data = { id, lat, lon, timestamp: new Date() };
+      await collection.insertOne(data);
+      return res.status(200).json({ status: 'Guardado en DB' });
     }
 
     if (req.method === 'GET') {
-        // La página web pide la última ubicación
-        const ultimaUbicacion = await collection.find().sort({ timestamp: -1 }).limit(1).toArray();
-        return res.status(200).json(ultimaUbicacion[0] || {});
+      const ultima = await collection
+        .find()
+        .sort({ timestamp: -1 })
+        .limit(1)
+        .toArray();
+      return res.status(200).json(ultima[0] || {});
     }
-}
+
+    return res.status(405).json({ error: 'Método no permitido' });
+
+  } catch (error) {
+    console.error('Error:', error);
+    return res.status(500).json({ error: error.message });
+  }
+};
