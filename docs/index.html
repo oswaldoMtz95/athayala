@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Athayala — Rastreador</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    :root {
+      --bg:        #0a0f0d;
+      --surface:   #111a15;
+      --border:    #1e3028;
+      --accent:    #2dff7a;
+      --accent2:   #00c4ff;
+      --warn:      #ffb83d;
+      --danger:    #ff4d6d;
+      --text:      #e8f5ee;
+      --muted:     #4a7060;
+      --card:      #0d1a12;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Syne', sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── GRID LAYOUT ── */
+    .layout {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      grid-template-columns: 320px 1fr;
+      grid-template-areas:
+        "header header"
+        "sidebar map";
+      height: 100vh;
+    }
+
+    @media (max-width: 768px) {
+      .layout {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto 1fr;
+        grid-template-areas:
+          "header"
+          "sidebar"
+          "map";
+        height: auto;
+        min-height: 100vh;
+      }
+    }
+
+    /* ── HEADER ── */
+    header {
+      grid-area: header;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      gap: 12px;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-icon {
+      width: 36px;
+      height: 36px;
+      background: var(--accent);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(45,255,122,0.4); }
+      50%       { box-shadow: 0 0 0 10px rgba(45,255,122,0); }
+    }
+
+    .logo h1 {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 1.3rem;
+      letter-spacing: 0.05em;
+      color: var(--text);
+    }
+
+    .logo span {
+      font-size: 0.7rem;
+      color: var(--muted);
+      font-family: 'Space Mono', monospace;
+      letter-spacing: 0.1em;
+      display: block;
+    }
+
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-family: 'Space Mono', monospace;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      border: 1px solid;
+      transition: all 0.3s;
+    }
+
+    .status-badge.online  { color: var(--accent);  border-color: var(--accent);  background: rgba(45,255,122,0.08); }
+    .status-badge.offline { color: var(--danger);  border-color: var(--danger);  background: rgba(255,77,109,0.08); }
+    .status-badge.waiting { color: var(--warn);    border-color: var(--warn);    background: rgba(255,184,61,0.08); }
+
+    .status-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: blink 1.4s ease-in-out infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.3; }
+    }
+
+    /* ── SIDEBAR ── */
+    .sidebar {
+      grid-area: sidebar;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 20px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    @media (max-width: 768px) {
+      .sidebar { border-right: none; border-bottom: 1px solid var(--border); }
+    }
+
+    .section-title {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.15em;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    /* ── CARDS ── */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      transition: border-color 0.3s;
+    }
+
+    .card:hover { border-color: var(--accent); }
+
+    /* Coordenadas */
+    .coord-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .coord-item label {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.6rem;
+      color: var(--muted);
+      letter-spacing: 0.1em;
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .coord-item .value {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    /* Stats row */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .stat {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 8px;
+      text-align: center;
+    }
+
+    .stat .val {
+      font-family: 'Space Mono', monospace;
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--accent2);
+    }
+
+    .stat .lbl {
+      font-size: 0.6rem;
+      color: var(--muted);
+      margin-top: 2px;
+      letter-spacing: 0.08em;
+    }
+
+    /* Red */
+    .net-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-family: 'Space Mono', monospace;
+      font-size: 0.7rem;
+      font-weight: 700;
+      margin-top: 8px;
+    }
+
+    .net-celular { background: rgba(45,255,122,0.1);  color: var(--accent);  border: 1px solid var(--accent); }
+    .net-wifi    { background: rgba(0,196,255,0.1);   color: var(--accent2); border: 1px solid var(--accent2); }
+    .net-unknown { background: rgba(74,112,96,0.1);   color: var(--muted);   border: 1px solid var(--muted); }
+
+    /* Timestamp */
+    .timestamp {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.68rem;
+      color: var(--muted);
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
+    }
+
+    .timestamp .ago {
+      color: var(--warn);
+      font-weight: 700;
+    }
+
+    /* History */
+    .history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 8px;
+      max-height: 180px;
+      overflow-y: auto;
+    }
+
+    .history-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-family: 'Space Mono', monospace;
+      font-size: 0.62rem;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .history-item:hover {
+      border-color: var(--accent);
+      color: var(--text);
+    }
+
+    .history-item .hi-coords { color: var(--text); }
+
+    /* Refresh info */
+    .refresh-info {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.62rem;
+      color: var(--muted);
+      text-align: center;
+      padding: 8px;
+    }
+
+    .refresh-bar {
+      height: 2px;
+      background: var(--border);
+      border-radius: 2px;
+      margin-top: 6px;
+      overflow: hidden;
+    }
+
+    .refresh-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 2px;
+      transition: width 1s linear;
+    }
+
+    /* ── MAP ── */
+    #map {
+      grid-area: map;
+      width: 100%;
+      height: 100%;
+      min-height: 400px;
+      background: #0a0f0d;
+    }
+
+    /* Leaflet dark override */
+    .leaflet-container { background: #0a0f0d; }
+    .leaflet-tile { filter: brightness(0.7) saturate(0.8) hue-rotate(140deg); }
+
+    /* Custom marker */
+    .pet-marker {
+      width: 36px; height: 36px;
+      background: var(--accent);
+      border-radius: 50% 50% 50% 0;
+      transform: rotate(-45deg);
+      border: 3px solid var(--bg);
+      box-shadow: 0 0 20px rgba(45,255,122,0.5);
+      animation: marker-pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes marker-pulse {
+      0%, 100% { box-shadow: 0 0 20px rgba(45,255,122,0.5); }
+      50%       { box-shadow: 0 0 40px rgba(45,255,122,0.9); }
+    }
+
+    .pet-marker-inner {
+      width: 14px; height: 14px;
+      background: var(--bg);
+      border-radius: 50%;
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    /* Loading overlay */
+    .loading {
+      position: fixed; inset: 0;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      gap: 20px;
+      transition: opacity 0.5s;
+    }
+
+    .loading.hide { opacity: 0; pointer-events: none; }
+
+    .loading-logo {
+      font-family: 'Syne', sans-serif;
+      font-size: 2rem;
+      font-weight: 800;
+      color: var(--accent);
+    }
+
+    .loading-bar {
+      width: 200px; height: 3px;
+      background: var(--border);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .loading-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 3px;
+      animation: load-anim 1.5s ease-in-out forwards;
+    }
+
+    @keyframes load-anim {
+      from { width: 0; }
+      to   { width: 100%; }
+    }
+
+    .loading p {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--muted);
+      letter-spacing: 0.1em;
+    }
+  </style>
+</head>
+<body>
+
+<!-- Loading -->
+<div class="loading" id="loading">
+  <div class="loading-logo">🐾 ATHAYALA</div>
+  <div class="loading-bar"><div class="loading-fill"></div></div>
+  <p>INICIANDO RASTREADOR...</p>
+</div>
+
+<div class="layout">
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo">
+      <div class="logo-icon">🐾</div>
+      <div>
+        <h1>ATHAYALA</h1>
+        <span>SISTEMA DE RASTREO</span>
+      </div>
+    </div>
+    <div class="status-badge waiting" id="statusBadge">
+      <div class="status-dot"></div>
+      <span id="statusText">CONECTANDO...</span>
+    </div>
+  </header>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+
+    <!-- Ubicación -->
+    <div>
+      <div class="section-title">📍 Ubicación actual</div>
+      <div class="card">
+        <div class="coord-grid">
+          <div class="coord-item">
+            <label>LATITUD</label>
+            <div class="value" id="lat">—</div>
+          </div>
+          <div class="coord-item">
+            <label>LONGITUD</label>
+            <div class="value" id="lon">—</div>
+          </div>
+        </div>
+        <div id="netBadge" class="net-badge net-unknown">⚡ —</div>
+        <div class="timestamp">
+          Última actualización:<br>
+          <span class="ago" id="lastUpdate">Esperando datos...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div>
+      <div class="section-title">📡 Telemetría</div>
+      <div class="stats-row">
+        <div class="stat">
+          <div class="val" id="sat">—</div>
+          <div class="lbl">SATÉLITES</div>
+        </div>
+        <div class="stat">
+          <div class="val" id="vel">—</div>
+          <div class="lbl">KM/H</div>
+        </div>
+        <div class="stat">
+          <div class="val" id="hdop">—</div>
+          <div class="lbl">HDOP</div>
+        </div>
+      </div>
+      <div class="stats-row" style="margin-top:8px">
+        <div class="stat">
+          <div class="val" id="alt">—</div>
+          <div class="lbl">ALT (m)</div>
+        </div>
+        <div class="stat" style="grid-column: span 2">
+          <div class="val" id="gpsStatus">—</div>
+          <div class="lbl">ESTADO GPS</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Historial -->
+    <div>
+      <div class="section-title">🕐 Historial reciente</div>
+      <div class="history-list" id="historyList">
+        <div style="color:var(--muted);font-family:'Space Mono',monospace;font-size:0.65rem;padding:8px">
+          Sin datos aún...
+        </div>
+      </div>
+    </div>
+
+    <!-- Refresh -->
+    <div class="refresh-info">
+      Actualización en <span id="countdown">15</span>s
+      <div class="refresh-bar">
+        <div class="refresh-fill" id="refreshFill" style="width:100%"></div>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- MAPA -->
+  <div id="map"></div>
+
+</div>
+
+<script>
+  // ── CONFIGURACIÓN ──────────────────────────────────────────
+// ✅ Correcto — sin puerto
+   const API_URL = 'https://athayala-production.up.railway.app/api';
+  //const API_URL = 'http://athayala-production.up.railway.app:8080/api';
+  //const API_URL      = 'https://athayala-production.up.railway.app/api';
+  const INTERVALO_MS = 15000;  // cada 15 segundos
+
+  // ── ESTADO ─────────────────────────────────────────────────
+  let map, marker, circle;
+  let historial = [];
+  let countdown = INTERVALO_MS / 1000;
+  let fillTimer;
+
+  // ── INICIALIZAR MAPA ───────────────────────────────────────
+  function initMap() {
+    map = L.map('map', { zoomControl: true }).setView([20.677041, -103.347745], 15);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap',
+      maxZoom: 19
+    }).addTo(map);
+  }
+
+  // ── MARCADOR PERSONALIZADO ─────────────────────────────────
+  function crearIcono() {
+    return L.divIcon({
+      className: '',
+      html: `<div class="pet-marker"><div class="pet-marker-inner"></div></div>`,
+      iconSize: [36, 36],
+      iconAnchor: [10, 36]
+    });
+  }
+
+  // ── ACTUALIZAR MAPA ────────────────────────────────────────
+  function actualizarMapa(lat, lon) {
+    const pos = [lat, lon];
+
+    if (marker) {
+      marker.setLatLng(pos);
+      if (circle) circle.setLatLng(pos);
+    } else {
+      marker = L.marker(pos, { icon: crearIcono() })
+        .addTo(map)
+        .bindPopup('<b>🐾 Tu mascota</b><br>Posición en tiempo real');
+
+      circle = L.circle(pos, {
+        radius: 30,
+        color: '#2dff7a',
+        fillColor: '#2dff7a',
+        fillOpacity: 0.08,
+        weight: 1
+      }).addTo(map);
+
+      map.setView(pos, 16);
+    }
+  }
+
+  // ── FORMATEAR TIEMPO ───────────────────────────────────────
+  function tiempoRelativo(fecha) {
+    const diff = Math.floor((Date.now() - new Date(fecha)) / 1000);
+    if (diff < 60)  return `hace ${diff}s`;
+    if (diff < 3600) return `hace ${Math.floor(diff/60)}min`;
+    return `hace ${Math.floor(diff/3600)}h`;
+  }
+
+  // ── ACTUALIZAR UI ──────────────────────────────────────────
+  function actualizarUI(data) {
+    // Coordenadas
+    document.getElementById('lat').textContent =
+      data.lat ? parseFloat(data.lat).toFixed(6) : '—';
+    document.getElementById('lon').textContent =
+      data.lon ? parseFloat(data.lon).toFixed(6) : '—';
+
+    // Telemetría
+    document.getElementById('sat').textContent  = data.sat  ?? '—';
+    document.getElementById('vel').textContent  = data.vel  ? parseFloat(data.vel).toFixed(1)  : '—';
+    document.getElementById('hdop').textContent = data.hdop ? parseFloat(data.hdop).toFixed(1) : '—';
+    document.getElementById('alt').textContent  = data.alt  ? parseFloat(data.alt).toFixed(0)  : '—';
+
+    // Estado GPS
+    const gpsEl = document.getElementById('gpsStatus');
+    if (data.gps_ok === true || data.gps_ok === 'true') {
+      gpsEl.textContent = '✅ FIX';
+      gpsEl.style.color = 'var(--accent)';
+    } else {
+      gpsEl.textContent = '⚠️ SIN FIX';
+      gpsEl.style.color = 'var(--warn)';
+    }
+
+    // Red
+    const netEl = document.getElementById('netBadge');
+    if (data.red === 'celular') {
+      netEl.className = 'net-badge net-celular';
+      netEl.textContent = '📶 TELCEL';
+    } else if (data.red === 'wifi') {
+      netEl.className = 'net-badge net-wifi';
+      netEl.textContent = '📡 WIFI';
+    } else {
+      netEl.className = 'net-badge net-unknown';
+      netEl.textContent = '⚡ DESCONOCIDO';
+    }
+
+    // Timestamp
+    if (data.timestamp) {
+      document.getElementById('lastUpdate').textContent =
+        tiempoRelativo(data.timestamp) + ' — ' +
+        new Date(data.timestamp).toLocaleTimeString('es-MX');
+    }
+
+    // Status badge header
+    const badge = document.getElementById('statusBadge');
+    const statusText = document.getElementById('statusText');
+    badge.className = 'status-badge online';
+    statusText.textContent = 'EN LÍNEA';
+
+    // Mapa
+    if (data.lat && data.lon) {
+      actualizarMapa(parseFloat(data.lat), parseFloat(data.lon));
+    }
+  }
+
+  // ── HISTORIAL ──────────────────────────────────────────────
+  function agregarHistorial(data) {
+    if (!data.lat || !data.lon) return;
+
+    historial.unshift(data);
+    if (historial.length > 10) historial.pop();
+
+    const lista = document.getElementById('historyList');
+    lista.innerHTML = historial.map((d, i) => `
+      <div class="history-item" onclick="irA(${d.lat}, ${d.lon})">
+        <span class="hi-coords">${parseFloat(d.lat).toFixed(4)}, ${parseFloat(d.lon).toFixed(4)}</span>
+        <span>${d.timestamp ? tiempoRelativo(d.timestamp) : '—'}</span>
+      </div>
+    `).join('');
+  }
+
+  function irA(lat, lon) {
+    map.setView([lat, lon], 17);
+  }
+
+  // ── FETCH DATOS ────────────────────────────────────────────
+  async function fetchDatos() {
+    try {
+      const res  = await fetch(API_URL);
+      const data = await res.json();
+
+      if (data && (data.lat || data.lon)) {
+        actualizarUI(data);
+        agregarHistorial(data);
+      } else {
+        setEstadoEsperando();
+      }
+    } catch (err) {
+      console.error('Error fetching:', err);
+      setEstadoOffline();
+    }
+  }
+
+  function setEstadoEsperando() {
+    const badge = document.getElementById('statusBadge');
+    badge.className = 'status-badge waiting';
+    document.getElementById('statusText').textContent = 'SIN DATOS';
+  }
+
+  function setEstadoOffline() {
+    const badge = document.getElementById('statusBadge');
+    badge.className = 'status-badge offline';
+    document.getElementById('statusText').textContent = 'SIN CONEXIÓN';
+  }
+
+  // ── BARRA DE COUNTDOWN ─────────────────────────────────────
+  function iniciarCountdown() {
+    countdown = INTERVALO_MS / 1000;
+    const fill = document.getElementById('refreshFill');
+    const countEl = document.getElementById('countdown');
+
+    clearInterval(fillTimer);
+    fillTimer = setInterval(() => {
+      countdown--;
+      countEl.textContent = countdown;
+      fill.style.width = ((countdown / (INTERVALO_MS / 1000)) * 100) + '%';
+
+      if (countdown <= 0) {
+        clearInterval(fillTimer);
+        fetchDatos().then(() => iniciarCountdown());
+      }
+    }, 1000);
+  }
+
+  // ── INIT ───────────────────────────────────────────────────
+  window.addEventListener('load', async () => {
+    initMap();
+
+    // Ocultar loading después de 1.5s
+    setTimeout(() => {
+      document.getElementById('loading').classList.add('hide');
+      setTimeout(() => document.getElementById('loading').remove(), 500);
+    }, 1500);
+
+    // Primera carga
+    await fetchDatos();
+    iniciarCountdown();
+  });
+</script>
+</body>
+</html>
